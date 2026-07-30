@@ -5,69 +5,109 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 #[cite: 2]
+
     steps:
-      - name: Checkout Kernel Source
+      - name: Set up Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12 #[cite: 2]
+
+      - name: Checkout Patched Kernel Source
         uses: actions/checkout@v4
 
-      - name: Setup Build Environment
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev liblz4-tool zstd ccache git wget curl zip unzip
+          sudo apt-get update -qq
+          sudo apt-get install -y bc bison build-essential curl flex git \
+            libelf-dev libssl-dev lz4 python3 zip unzip wget cpio \
+            libncurses5-dev #[cite: 2]
 
-      - name: Download Toolchains (GCC & Clang)
+      - name: Download Official Toolchain (Clang & GCC)
         run: |
-          mkdir -p $GITHUB_WORKSPACE/toolchains
-          cd $GITHUB_WORKSPACE/toolchains
-          
-          # Download AOSP Clang 12.0.5 (Standard untuk Exynos Android 12/13)
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b.tar.gz -O clang.tar.gz
-          mkdir clang && tar -xf clang.tar.gz -C clang && rm clang.tar.gz
-          
-          # Download GCC Aarch64 & ARM32
-          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/android12-release.tar.gz -O gcc64.tar.gz
-          mkdir gcc64 && tar -xf gcc64.tar.gz -C gcc64 && rm gcc64.tar.gz
-          
-          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/android12-release.tar.gz -O gcc32.tar.gz
-          mkdir gcc32 && tar -xf gcc32.tar.gz -C gcc32 && rm gcc32.tar.gz
+          echo "-> Membajak Toolchain Lawas..."
+          git clone --depth=1 https://github.com/dapurandroid/android_kernel_a047f_eur forked_repo #[cite: 2]
+          mv forked_repo/toolchain ./toolchain #[cite: 2]
+          rm -rf forked_repo #[cite: 2]
 
-      - name: Compile Kernel
+      - name: Compile Kernel (Android 12 Target)
         run: |
-          export PATH="$GITHUB_WORKSPACE/toolchains/clang/bin:$GITHUB_WORKSPACE/toolchains/gcc64/bin:$GITHUB_WORKSPACE/toolchains/gcc32/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export HEADER_ARCH=arm64
-
-          MAKE_ARGS="
-            ARCH=arm64 \
-            CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            LLVM=1 \
-            LLVM_IAS=1
-          "
-
-          # Load Defconfig
-          make O=out $MAKE_ARGS exynos850-a04sxx_defconfig
+          # Deklarasi Variabel Android mutlak dari panduan Samsung[cite: 1]
+          export PLATFORM_VERSION=12 #[cite: 1, 2]
+          export ANDROID_MAJOR_VERSION=s #[cite: 1, 2]
+          export ARCH=arm64 #[cite: 1, 2]
           
-          # Start Compilation
-          make -j$(nproc --all) O=out $MAKE_ARGS
+          # Buat version.config KOSONG agar tidak merusak nama kernel asli (-dirty)
+          echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"\"\n" > "arch/arm64/configs/version.config" #[cite: 2]
+          
+          # Eksekusi Kompilasi dengan argument spesifik
+          export COMPILER_ARGS="-C $(pwd) O=$(pwd)/out -j$(nproc) ARCH=arm64 CROSS_COMPILE=${GITHUB_WORKSPACE}/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- CC=${GITHUB_WORKSPACE}/toolchain/clang/host/linux-x86/clang-r353983c/bin/clang" #[cite: 1, 2]
+          
+          echo "-> Memulai Kompilasi Inti..."
+          make $COMPILER_ARGS exynos850-a04sxx_defconfig version.config #[cite: 1, 2]
+          make $COMPILER_ARGS #[cite: 1, 2]
 
-      - name: Check Output Kernel
+      - name: Setup AIK-Linux & Package Odin Tar
         run: |
-          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
-            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image.gz-dtb" >> $GITHUB_ENV
-          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image.gz" >> $GITHUB_ENV
-          elif [ -f "out/arch/arm64/boot/Image" ]; then
-            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image" >> $GITHUB_ENV
-          else
-            echo "Kernel Image not found!" && exit 1
+          echo "-> Membersihkan area kerja..."
+          rm -rf AIK aik.tar.gz stock_boot.zip #[cite: 2]
+          
+          echo "-> Mengunduh AIK-Linux dari Release Internal..."
+          wget -q https://github.com/dapurandroid/a04s-android14-clean/releases/download/v1.0-boot/AIK-Linux-v3.8-ALL.tar.gz -O aik.tar.gz #[cite: 2]
+          
+          echo "-> Mengekstrak AIK-Linux..."
+          mkdir AIK #[cite: 2]
+          tar -xzf aik.tar.gz -C AIK --strip-components=1 #[cite: 2]
+          cd AIK #[cite: 2]
+          
+          echo "-> Mengunduh Stock Boot.img dari Release Internal..."
+          wget -q https://github.com/dapurandroid/a04s-android14-clean/releases/download/v1.0-boot/stock_boot.zip -O stock_boot.zip #[cite: 2]
+          unzip -q stock_boot.zip #[cite: 2]
+          
+          echo "-> Membongkar Boot.img dengan AIK..."
+          ./unpackimg.sh boot.img #[cite: 2]
+          
+          echo "-> Mengosongkan OS Version & Patch Level (Bypass Rollback Protection)..."
+          echo -n "" > split_img/boot.img-os_version #[cite: 2]
+          echo -n "" > split_img/boot.img-os_patch_level #[cite: 2]
+          
+          echo "-> Menerapkan Bypass AVB & VBMETA di Fstab Ramdisk..."
+          FSTAB_FILE=$(find ramdisk -name "fstab.exynos850" | head -n 1) #[cite: 2]
+          if [ -f "$FSTAB_FILE" ]; then
+            sudo sed -i 's/,avb_keys=[^[:space:]]*//g' "$FSTAB_FILE" #[cite: 2]
+            sudo sed -i 's/,avb//g' "$FSTAB_FILE" #[cite: 2]
+            sudo sed -i 's/avb//g' "$FSTAB_FILE" #[cite: 2]
+            sudo sed -i 's/,vbmeta//g' "$FSTAB_FILE" #[cite: 2]
+            sudo sed -i 's/vbmeta//g' "$FSTAB_FILE" #[cite: 2]
+            sudo sed -i 's/,,/,/g' "$FSTAB_FILE" #[cite: 2]
           fi
+          
+          echo "-> Mencari Kernel Image hasil kompilasi..."
+          KERNEL_IMAGE=$(find $GITHUB_WORKSPACE -type f -path "*/arch/arm64/boot/Image" | head -n 1) #[cite: 1, 2]
+          
+          echo "-> Menyuntikkan Kernel Image KSU-Next yang baru..."
+          cp "$KERNEL_IMAGE" split_img/boot.img-kernel #[cite: 2]
+          
+          echo "-> Membuat direktori ramdisk wajib Android..."
+          mkdir -p ramdisk/{debug_ramdisk,dev,metadata,mnt,proc,second_stage_resources,sys} #[cite: 2]
+          
+          echo "-> Membungkus ulang Boot.img..."
+          ./repackimg.sh --nosudo #[cite: 2]
+          
+          echo "-> Mengemas menjadi format .tar untuk Odin..."
+          mkdir -p $GITHUB_WORKSPACE/odin_output #[cite: 2]
+          cp image-new.img $GITHUB_WORKSPACE/odin_output/boot.img #[cite: 2]
+          cd $GITHUB_WORKSPACE/odin_output #[cite: 2]
+          
+          BUILD_DATE=$(date +%Y%m%d-%H%M) #[cite: 2]
+          TAR_NAME="SamsungA04s-KSUNext-Odin-${BUILD_DATE}.tar" #[cite: 2]
+          tar -H ustar -cf "$TAR_NAME" boot.img #[cite: 2]
+          
+          echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV #[cite: 2]
 
-      - name: Upload Kernel Image Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Odin Tar Artifact
+        uses: actions/upload-artifact@v4 #[cite: 2]
         with:
-          name: KernelSU-Next-SUSFS-A04s
-          path: ${{ env.KERNEL_IMAGE }}
+          name: odin-kernel-package #[cite: 2]
+          path: odin_output/*.tar #[cite: 2]
+          retention-days: 14 #[cite: 2]
