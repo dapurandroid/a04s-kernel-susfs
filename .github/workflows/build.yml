@@ -1,0 +1,73 @@
+name: Build Samsung A04s KernelSU-Next + SUSFS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev liblz4-tool zstd ccache git wget curl zip unzip
+
+      - name: Download Toolchains (GCC & Clang)
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/toolchains
+          cd $GITHUB_WORKSPACE/toolchains
+          
+          # Download AOSP Clang 12.0.5 (Standard untuk Exynos Android 12/13)
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b.tar.gz -O clang.tar.gz
+          mkdir clang && tar -xf clang.tar.gz -C clang && rm clang.tar.gz
+          
+          # Download GCC Aarch64 & ARM32
+          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/android12-release.tar.gz -O gcc64.tar.gz
+          mkdir gcc64 && tar -xf gcc64.tar.gz -C gcc64 && rm gcc64.tar.gz
+          
+          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/android12-release.tar.gz -O gcc32.tar.gz
+          mkdir gcc32 && tar -xf gcc32.tar.gz -C gcc32 && rm gcc32.tar.gz
+
+      - name: Compile Kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/toolchains/clang/bin:$GITHUB_WORKSPACE/toolchains/gcc64/bin:$GITHUB_WORKSPACE/toolchains/gcc32/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export HEADER_ARCH=arm64
+
+          MAKE_ARGS="
+            ARCH=arm64 \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            LLVM=1 \
+            LLVM_IAS=1
+          "
+
+          # Load Defconfig
+          make O=out $MAKE_ARGS exynos850-a04sxx_defconfig
+          
+          # Start Compilation
+          make -j$(nproc --all) O=out $MAKE_ARGS
+
+      - name: Check Output Kernel
+        run: |
+          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
+            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image.gz-dtb" >> $GITHUB_ENV
+          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image.gz" >> $GITHUB_ENV
+          elif [ -f "out/arch/arm64/boot/Image" ]; then
+            echo "KERNEL_IMAGE=out/arch/arm64/boot/Image" >> $GITHUB_ENV
+          else
+            echo "Kernel Image not found!" && exit 1
+          fi
+
+      - name: Upload Kernel Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KernelSU-Next-SUSFS-A04s
+          path: ${{ env.KERNEL_IMAGE }}
