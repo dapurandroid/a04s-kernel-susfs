@@ -719,6 +719,8 @@ struct wake_q_node {
 };
 
 struct task_struct {
+	unsigned long susfs_task_state;
+	int susfs_last_fake_mnt_id;
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
 	 * For reasons of header soup (see current_thread_info()), this

@@ -54,3 +54,8 @@ struct st_susfs_open_redirect { int dummy; };
 struct st_sus_su { int dummy; };
 
 #endif /* _LINUX_SUSFS_DEF_H */
+struct st_susfs_sus_path { int dummy; };
+struct st_susfs_sus_mount { int dummy; };
+struct st_susfs_sus_kstat { int dummy; };
+struct st_susfs_try_umount { int dummy; };
+struct st_susfs_uname { int dummy; };

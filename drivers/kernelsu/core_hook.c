@@ -1,8 +1,4 @@
 #include <linux/susfs_def.h>
-#define SUSFS_VERSION "1.5.5"
-#define SUSFS_VARIANT "A04s-GKI"
-struct st_susfs_open_redirect { int dummy; };
-struct st_sus_su { int dummy; };
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/dcache.h>
