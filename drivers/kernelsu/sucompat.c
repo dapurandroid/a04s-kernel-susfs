@@ -228,7 +228,7 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 int ksu_handle_devpts(struct inode *inode)
 {
 #ifndef CONFIG_KSU_WITH_KPROBES
-	if (!ksu_devpts_hook) {
+	if (0) {
 		return 0;
 	}
 #endif
@@ -409,7 +409,7 @@ void ksu_sucompat_init()
 	ksu_stat_hook = true;
 	ksu_execve_sucompat_hook = true;
 	ksu_execveat_sucompat_hook = true;
-	ksu_devpts_hook = true;
+	 
 	pr_info("ksu_sucompat_init: hooks enabled: execve/execveat_su, faccessat, stat, devpts\n");
 #endif
 }
@@ -425,7 +425,7 @@ void ksu_sucompat_exit()
 	ksu_stat_hook = false;
 	ksu_execve_sucompat_hook = false;
 	ksu_execveat_sucompat_hook = false;
-	ksu_devpts_hook = false;
+	 
 	pr_info("ksu_sucompat_exit: hooks disabled: execve/execveat_su, faccessat, stat, devpts\n");
 #endif
 }
@@ -434,19 +434,19 @@ void ksu_sucompat_exit()
 extern bool ksu_devpts_hook;
 
 void ksu_susfs_disable_sus_su(void) {
-	enable_kprobe(&execve_kp);
-	enable_kprobe(&newfstatat_kp);
-	enable_kprobe(&faccessat_kp);
-	enable_kprobe(&pts_unix98_lookup_kp);
-	ksu_devpts_hook = false;
+	 // enable_kprobe(&execve_kp);
+	 // enable_kprobe(&newfstatat_kp);
+	 // enable_kprobe(&faccessat_kp);
+	 // enable_kprobe(&pts_unix98_lookup_kp);
+	 
 }
 
 void ksu_susfs_enable_sus_su(void) {
-	disable_kprobe(&execve_kp);
-	disable_kprobe(&newfstatat_kp);
-	disable_kprobe(&faccessat_kp);
-	disable_kprobe(&pts_unix98_lookup_kp);
-	ksu_devpts_hook = true;
+	 // disable_kprobe(&execve_kp);
+	 // disable_kprobe(&newfstatat_kp);
+	 // disable_kprobe(&faccessat_kp);
+	 // disable_kprobe(&pts_unix98_lookup_kp);
+	 
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
 
